@@ -39,7 +39,7 @@
 @property (nonatomic, strong) NSRegularExpression *VALID_ALPHA_PHONE_PATTERN;
 
 #if TARGET_OS_IPHONE && !TARGET_OS_WATCH
-@property (nonatomic, strong) CTTelephonyNetworkInfo *telephonyNetworkInfo;
+//@property (nonatomic, strong) CTTelephonyNetworkInfo *telephonyNetworkInfo;
 #endif
 
 @end
@@ -3309,12 +3309,25 @@ static NSDictionary *DIGIT_MAPPINGS;
     // real-world performance test while parsing 93 phone numbers:
     // before change:   126ms
     // after change:    32ms
-    if (!self.telephonyNetworkInfo) {
-        self.telephonyNetworkInfo = [[CTTelephonyNetworkInfo alloc] init];
+//    if (!self.telephonyNetworkInfo) {
+//        self.telephonyNetworkInfo = [[CTTelephonyNetworkInfo alloc] init];
+//    }
+
+    // Suspect that CTTelephonyNetworkInfo objects are being called back after they are disposed.
+    // Workaround: create a single instance, never disposed, shared by all NBPhoneNumberUtil objects.
+    // Synchronize access to shared resource for thread-safe access.
+    static CTTelephonyNetworkInfo *telephonyNetworkInfo = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        telephonyNetworkInfo = [[CTTelephonyNetworkInfo alloc] init];
+    });
+
+    NSString *isoCode = nil;
+    @synchronized(telephonyNetworkInfo)
+    {
+        isoCode = [[telephonyNetworkInfo subscriberCellularProvider] isoCountryCode];
     }
-    
-    NSString *isoCode = [[self.telephonyNetworkInfo subscriberCellularProvider] isoCountryCode];
-    
+  
     // The 2nd part of the if is working around an iOS 7 bug
     // If the SIM card is missing, iOS 7 returns an empty string instead of nil
     if (!isoCode || [isoCode isEqualToString:@""]) {
